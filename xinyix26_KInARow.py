@@ -1,8 +1,6 @@
 '''
-<yourUWNetID>_KInARow.py
-Authors: <your name(s) here, lastname first and partners separated by ";">
-  Example:  
-    Authors: Smith, Jane; Lee, Laura
+xinyix26_KInARow.py
+Authors: Xu, Claire; Chen, Ziwen
 
 An agent for playing "K-in-a-Row with Forbidden Squares" and related games.
 CSE 415, University of Washington
@@ -13,11 +11,10 @@ TO PROVIDE A GOOD STRUCTURE FOR YOUR IMPLEMENTATION.
 
 '''
 
-from agent_base import KAgent
-from game_types import State, Game_Type
-
 AUTHORS = 'Claire Xu and Ziwen Chen'
 
+from agent_base import KAgent
+from game_types import State, Game_Type
 import time # You'll probably need this to avoid losing a
  # game due to exceeding a time limit.
 
@@ -28,11 +25,11 @@ class OurAgent(KAgent):  # Keep the class name "OurAgent" so a game master
 
     def __init__(self, twin=False):
         self.twin=twin
-        self.nickname = 'Nic'
+        self.nickname = 'ZTC'
         if twin: self.nickname += '2'
-        self.long_name = 'Templatus Skeletus'
+        self.long_name = 'Zara the Cat'
         if twin: self.long_name += ' II'
-        self.persona = 'bland'
+        self.persona = 'agressive'
         self.voice_info = {'Chrome': 10, 'Firefox': 2, 'other': 0}
         self.playing = "don't know yet" # e.g., "X" or "O".
         self.alpha_beta_cutoffs_this_turn = -1
@@ -42,9 +39,9 @@ class OurAgent(KAgent):  # Keep the class name "OurAgent" so a game master
         self.current_game_type = None
 
     def introduce(self):
-        intro = '\nMy name is Templatus Skeletus.\n'+\
-            '"An instructor" made me.\n'+\
-            'Somebody please turn me into a real game-playing agent!\n'
+        intro = '\nMy name is Zara the Cat.\n'+\
+            'Claire Xu and Ziwen Chen made me.\n'+\
+            'Their netIDs are xinyix26 and zchen56.\n'
         if self.twin: intro += "By the way, I'm the TWIN.\n"
         return intro
 
@@ -61,7 +58,7 @@ class OurAgent(KAgent):  # Keep the class name "OurAgent" so a game master
         utterances_matter=True):      # If False, just return 'OK' for each utterance,
                                       # or something simple and quick to compute
                                       # and do not import any LLM or special APIs.
-                                      # During the tournament, this will be False..
+                                      # During the tournament, this will be False.
        if utterances_matter:
            pass
            # Optionally, import your LLM API here.
@@ -80,19 +77,20 @@ class OurAgent(KAgent):  # Keep the class name "OurAgent" so a game master
                   special_static_eval_fn=None):
         print("make_move has been called")
 
-        print("code to compute a good move should go here.")
-        # Here's a placeholder:
-        a_default_move = (0, 0) # This might be legal ONCE in a game,
-        # if the square is not forbidden or already occupied.
-    
-        new_state = current_state # This is not allowed, and even if
-        # it were allowed, the newState should be a deep COPY of the old.
-    
-        new_remark = "I need to think of something appropriate.\n" +\
-        "Well, I guess I can say that this move is probably illegal."
+        possibleMoves = successors_and_moves(state)
+        myMove = chooseMove(possibleMoves)
+        myUtterance = self.nextUtterance()
+        newState, newMove = myMove
 
-        print("Returning from make_move")
-        return [[a_default_move, new_state], new_remark]
+        if not autograding:
+            return [[newMove, newState], myUtterance]
+
+        stats = [self.alpha_beta_cutoffs_this_turn,
+                 self.num_static_evals_this_turn,
+                 self.zobrist_table_num_entries_this_turn,
+                 self.zobrist_table_num_hits_this_turn]
+
+        return [[newMove, newState] + stats, myUtterance]
 
     # The main adversarial search function:
     def minimax(self,
@@ -110,12 +108,68 @@ class OurAgent(KAgent):  # Keep the class name "OurAgent" so a game master
         # in the list, after the score, in case you want to pass info
         # back from recursive calls that might be used in your utterances,
         # etc. 
- 
+
     def static_eval(self, state, game_type=None):
-        print('calling static_eval. Its value needs to be computed!')
         # Values should be higher when the states are better for X,
         # lower when better for O.
-        return 0
+        k = game_type.k  # k in a row/column/diagonal to win
+        board = state.board
+        rows, cols = len(board), len(board[0])
+        game_name = game_type.short_name  # amount of work depend on type of game
+
+        # Precompute valid positions
+        if game_name == "5-in-a-Row":
+            valid_positions = {(r, c) for r in range(rows) for c in range(cols) if not is_forbidden_corner(r, c)}
+        elif game_name == "Cassini":
+            valid_positions = {(r, c) for r in range(rows) for c in range(cols) if not is_saturn_region(r, c)}
+        else:
+            valid_positions = {(r, c) for r in range(rows) for c in range(cols)}
+
+        def count_lines(player, k_needed):
+            # Count the number of open sequences of length k_needed for a given player
+            count = 0
+            for r, c in valid_positions:
+                if board[r][c] == player:  # Only check from positions occupied by the player
+                    count += check_directions(r, c, player, k_needed)
+            return count
+
+        def check_directions(r, c, player, k_needed):
+            # Checks sequences in four directions: horizontal, vertical,
+            #                                      lower-left to upper-right,  and upper-left to lower-right
+            directions = [(1, 0), (0, 1), (1, 1), (1, -1)]  # Down, right, diagonal-right, diagonal-left
+            count = 0
+            for dr, dc in directions:
+                sequence = []
+                for i in range(k):
+                    nr, nc = r + i * dr, c + i * dc
+                    if (nr, nc) in valid_positions and 0 <= nr < rows and 0 <= nc < cols:
+                        sequence.append(board[nr][nc])
+                    else:
+                        break
+                if (len(sequence) == k and
+                    sequence.count(player) == k_needed and
+                    ('X' if player == 'O' else 'O') not in sequence):
+                    count += 1
+            return count
+
+        def compute_eval(player, k):
+            # Compute evaluation of a state for a player by the following rule:
+            #   count_lines of i items in an open enough row/column/diagonal * 10 ** (i-1) for 1 <= i <= k
+            sum = 0
+            for i in range(1, k+1):
+                sum += count_lines(player, i) * 10 ** (i-1)
+            return sum
+
+        # return eval of X - eval of O so that value is larger when state better for X, smaller when state better for O
+        return compute_eval('X', k) - compute_eval('O', k)
+
+def is_forbidden_corner(r, c):
+    # check if a position is in the forbidden corner in FIAR
+    return (r, c) in {(0, 0), (0, 6), (6, 0), (6, 6)}
+
+def is_saturn_region(r, c):
+    # check if a position is in saturn in Cassini
+    return (r, c) in {(2, 3), (2, 4), (4, 3), (4, 4), (3, 2), (3, 3), (3, 4), (3, 5)}
  
 # OPTIONAL THINGS TO KEEP TRACK OF:
 

@@ -101,7 +101,7 @@ def chooseMove(statesAndMoves):
 
 # The following is a Python "generator" function that creates an
 # iterator to provide one move and new state at a time.
-# It could be used in a smarter agent to only generate SOME of
+# It could be used in a smarter agent to only generate SOME
 # of the possible moves, especially if an alpha cutoff or beta
 # cutoff determines that no more moves from this state are needed.
 def move_gen(state):
@@ -126,7 +126,7 @@ def successors_and_moves(state):
         new_states.append(item[1])
     return [new_states, moves]
 
-# Performa a move to get a new state.
+# Perform a move to get a new state.
 def do_move(state, i, j, o):
             news = game_types.State(old=state)
             news.board[i][j] = state.whose_move

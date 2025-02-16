@@ -63,7 +63,7 @@ class KAgent:
             utterances_matter=True):      # If False, just return 'OK' for each utterance,
                                           # or something simple and quick to compute
                                           # and do not import any LLM or special APIs.
-                                          # During the tournament, this will be False..
+                                          # During the tournament, this will be False.
        if utterances_matter:
            pass
            # Optionally, import your LLM API here.
@@ -100,7 +100,7 @@ class KAgent:
         stats = [self.alpha_beta_cutoffs_this_turn,
                  self.num_static_evals_this_turn,
                  self.zobrist_table_num_entries_this_turn,
-                 self.zobristt_table_num_hits_this_turn]
+                 self.zobrist_table_num_hits_this_turn]
         
 
         return [[a_default_move, new_state]+stats, new_remark]
