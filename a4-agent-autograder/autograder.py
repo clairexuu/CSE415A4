@@ -191,7 +191,7 @@ def test_minimax(agent, use_alpha_beta=False):
     print("Prepare was successful, it seems.")
     print("Next ... let's test minimaxing (and possibly alpha-beta pruning).")
     opponent_remark = "Do your thing."
-    response = agent.make_move(\
+    response = agent.make_move(
                 MM_TEST_STATE,
                 opponent_remark,
                 autograding=True,
