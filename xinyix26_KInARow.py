@@ -13,6 +13,10 @@ TO PROVIDE A GOOD STRUCTURE FOR YOUR IMPLEMENTATION.
 
 AUTHORS = 'Claire Xu and Ziwen Chen'
 
+import random
+# import pyttsx3
+import openai
+
 from agent_base import KAgent
 from game_types import State, Game_Type
 import time  # You'll probably need this to avoid losing a
@@ -31,7 +35,7 @@ class OurAgent (KAgent):  # Keep the class name "OurAgent" so a game master
         if twin: self.nickname += '2'
         self.long_name = 'Zara the Cat'
         if twin: self.long_name += ' II'
-        self.persona = 'agressive'
+        self.persona = 'aggressive meow'
         self.voice_info = {'Chrome': 10, 'Firefox': 2, 'other': 0}
         self.playing = "X"  # e.g., "X" or "O".
         self.alpha_beta_cutoffs_this_turn = -1
@@ -39,9 +43,10 @@ class OurAgent (KAgent):  # Keep the class name "OurAgent" so a game master
         self.zobrist_table_num_entries_this_turn = -1
         self.zobrist_table_num_hits_this_turn = -1
         self.current_game_type = None
+        self.GPT_API = None
 
     def introduce (self):
-        intro = '\nMy name is Zara the Cat.\n' + \
+        intro = '\nMy name is Zara the Cat, the ultimate master of k-in-row.\n' + \
                 'Claire Xu and Ziwen Chen made me.\n' + \
                 'Their netIDs are xinyix26 and zchen56.\n'
         if self.twin: intro += "By the way, I'm the TWIN.\n"
@@ -65,9 +70,9 @@ class OurAgent (KAgent):  # Keep the class name "OurAgent" so a game master
         self.current_game_type = game_type
 
         if utterances_matter:
-            pass
+            # pass
             # Optionally, import your LLM API here.
-            # Then you can use it to help create utterances.
+            self.GPT_API = "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"
 
         # Write code to save the relevant information in variables
         # local to this instance of the agent.
@@ -90,8 +95,8 @@ class OurAgent (KAgent):  # Keep the class name "OurAgent" so a game master
 
         myMove = self.chooseMove (current_state, use_alpha_beta=use_alpha_beta,
                                   special_static_eval_fn=special_static_eval_fn)
-        myUtterance = self.nextUtterance ()
-        newState, newMove = myMove
+        newState, newMove, best_eval = myMove
+        myUtterance = self.nextUtterance (user_input=current_remark,best_eval=best_eval)
 
         if not autograding:
             return [[newMove, newState], myUtterance]
@@ -103,13 +108,49 @@ class OurAgent (KAgent):  # Keep the class name "OurAgent" so a game master
 
         return [[newMove, newState] + stats, myUtterance]
 
-    def nextUtterance (self):
-        return "Meow " * 10
+    def nextUtterance (self, user_input="What do you want to say?", best_eval=0):
+        if self.GPT_API is None:
+            return "Meow " * random.randint (2, 6)  # 没有 API 就返回默认值
+
+        # 设置 System Prompt
+        system_prompt = f"""
+        You are a cat k-in-a-row master, playing as ‘{self.playing}’, with the persona: {self.persona}.
+        This round, you performed {self.num_static_evals_this_turn} evaluations, ending with a score of {best_eval}(Don't spoil your score to opponent).
+        If playing as ‘X’, a higher score means greater advantage; if playing as ‘O’, a lower score means greater advantage.
+        Respond as a cat would—fully embracing your personality.
+        Your tone should match your dominance: the more advantage you have, the ruder and more confident you sound;
+        the less advantage, the more cautious or humble. Keep responses short, within one or two sentences.
+        """
+
+        # 设置 User Prompt
+        user_prompt = user_input
+
+        try:
+            response = openai.ChatCompletion.create (
+                model="gpt-4o-mini-2024-07-18",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                api_key=self.GPT_API
+            )
+            utterance = response["choices"][0]["message"]["content"]
+        except Exception as e:
+            print ("GPT API Error:", e)
+            return "Meow... something went wrong."
+
+        # 朗读生成的文本
+        # engine = pyttsx3.init ()
+        # engine.setProperty ('rate', 200)  # 语速
+        # engine.say (utterance)
+        # engine.runAndWait ()
+
+        return utterance
 
     def chooseMove (self, state, use_alpha_beta=False, special_static_eval_fn=None):
         minmax_info = self.minimax (state, 2, pruning=use_alpha_beta, alpha=float ('-inf'), beta=float ('inf'),
                                     special_static_eval_fn=special_static_eval_fn)
-        return [minmax_info[2], minmax_info[1]]
+        return [minmax_info[2], minmax_info[1], minmax_info[0]]
 
     # The main adversarial search function:
     def minimax (self,
