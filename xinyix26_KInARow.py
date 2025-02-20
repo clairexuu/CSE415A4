@@ -88,12 +88,10 @@ class OurAgent (KAgent):  # Keep the class name "OurAgent" so a game master
         self.zobrist_table_num_entries_this_turn = 0
         self.zobrist_table_num_hits_this_turn = 0
 
-
-        myMove = self.chooseMove (current_state)
+        myMove = self.chooseMove (current_state, use_alpha_beta=use_alpha_beta,
+                                  special_static_eval_fn=special_static_eval_fn)
         myUtterance = self.nextUtterance ()
         newState, newMove = myMove
-
-
 
         if not autograding:
             return [[newMove, newState], myUtterance]
@@ -103,19 +101,14 @@ class OurAgent (KAgent):  # Keep the class name "OurAgent" so a game master
                  self.zobrist_table_num_entries_this_turn,
                  self.zobrist_table_num_hits_this_turn]
 
-
-        # 根据 se 的次数来调用特殊计数
-        for i in range(self.num_static_evals_this_turn):
-            special_static_eval_fn(current_state)
-
         return [[newMove, newState] + stats, myUtterance]
 
     def nextUtterance (self):
         return "Meow " * 10
 
-    def chooseMove (self, state):
-        # minmax_info = self.minimax(state, 2, False ,float('-inf'), float('inf'))
-        minmax_info = self.minimax (state, 2)
+    def chooseMove (self, state, use_alpha_beta=False, special_static_eval_fn=None):
+        minmax_info = self.minimax (state, 2, pruning=use_alpha_beta, alpha=float ('-inf'), beta=float ('inf'),
+                                    special_static_eval_fn=special_static_eval_fn)
         return [minmax_info[2], minmax_info[1]]
 
     # The main adversarial search function:
@@ -124,28 +117,28 @@ class OurAgent (KAgent):  # Keep the class name "OurAgent" so a game master
                  depth_remaining,
                  pruning=False,
                  alpha=None,
-                 beta=None):
+                 beta=None,
+                 special_static_eval_fn=None):
         # print("Calling minimax. We need to implement its body.")
 
         # Base case: if the depth is 0 or the game is over, return the evaluation of the state
         if depth_remaining == 0 or state.finished == True:
-            return [self.static_eval(state, game_type=self.current_game_type), "this is the end", "ennnnnd"]
-
-
+            if special_static_eval_fn is not None:
+                return [special_static_eval_fn (state), "so special", "and so annoying"]
+            else:
+                return [self.static_eval (state, game_type=self.current_game_type), "this is the end", "ennnnnd"]
 
         best_move = None
         best_state = None
 
         if state.whose_move == "X":  # Maximizing
 
-            if alpha is not None:
-                max_eval = alpha
-            else:
-                max_eval = float ('-inf')
+            max_eval = alpha
 
             for move in self.get_possible_moves (state):
                 new_state = self.apply_move (state, move)
-                eval_score, _, _ = self.minimax (new_state, depth_remaining - 1, pruning, alpha, beta)
+                eval_score, _, _ = self.minimax (new_state, depth_remaining - 1, pruning, alpha, beta,
+                                                 special_static_eval_fn)
 
                 if eval_score > max_eval:
                     max_eval = eval_score
@@ -155,7 +148,6 @@ class OurAgent (KAgent):  # Keep the class name "OurAgent" so a game master
                 if pruning:
                     alpha = max (alpha, eval_score)
                     if beta <= alpha:
-
                         # 计数
                         self.alpha_beta_cutoffs_this_turn += 1
 
@@ -165,14 +157,12 @@ class OurAgent (KAgent):  # Keep the class name "OurAgent" so a game master
 
         else:  # Minimizing player
 
-            if beta is not None:
-                min_eval = beta
-            else:
-                min_eval = float ('inf')
+            min_eval = beta
 
             for move in self.get_possible_moves (state):
                 new_state = self.apply_move (state, move)
-                eval_score, _, _ = self.minimax (new_state, depth_remaining - 1, pruning, alpha, beta)
+                eval_score, _, _ = self.minimax (new_state, depth_remaining - 1, pruning, alpha, beta,
+                                                 special_static_eval_fn)
 
                 if eval_score < min_eval:
                     min_eval = eval_score
@@ -182,7 +172,6 @@ class OurAgent (KAgent):  # Keep the class name "OurAgent" so a game master
                 if pruning:
                     beta = min (beta, eval_score)
                     if beta <= alpha:
-
                         # 计数
                         self.alpha_beta_cutoffs_this_turn += 1
 
@@ -196,85 +185,89 @@ class OurAgent (KAgent):  # Keep the class name "OurAgent" so a game master
         # back from recursive calls that might be used in your utterances,
         # etc.
 
+
     def static_eval (self, state, game_type=None):
         # static evaluation function.
         # Given a game state, it returns a numeric evaluation of that state
-        # where a higher value means that the state is better for X and a lower value is a state better for O.
+        # where a higher value means that the state is better for X
+        # and a lower value is better for O.
 
-        # 计数
+        # 记数
         self.num_static_evals_this_turn += 1
 
-
-        k = game_type.k  # k in a row/column/diagonal to win
         board = state.board
         rows, cols = len (board), len (board[0])
-        game_name = game_type.short_name  # amount of work depend on type of game
+        k = game_type.k
+        game_name = game_type.short_name
 
-        # Get valid positions in the board
+
+        # 游戏分类，根据规则拿到有效位置
         if game_name == "5-in-a-Row":
-            valid_positions = {(r, c) for r in range (rows) for c in range (cols) if not is_forbidden_corner (r, c)}
+            valid_positions = {
+                (r, c)
+                for r in range (rows)
+                for c in range (cols)
+                if not is_forbidden_corner (r, c)
+            }
         elif game_name == "Cassini":
-            valid_positions = {(r, c) for r in range (rows) for c in range (cols) if not is_saturn_region (r, c)}
+            valid_positions = {
+                (r, c)
+                for r in range (rows)
+                for c in range (cols)
+                if not is_saturn_region (r, c)
+            }
         else:
+            # 默认所有位置都有效
             valid_positions = {(r, c) for r in range (rows) for c in range (cols)}
 
-        # TODO: to make it faster, mark row/col/dia that's already checked?
 
-        def count_lines (player, num_pieces):
-            # Count the number of open enough hor/ver/dia_up/dia_down sequence with exactly num_pieces of player
-            count = 0
-            for r, c in valid_positions:
-                if board[r][c] == player:  # Only check from positions occupied by the player
-                    count += check_directions (r, c, player, num_pieces)
-            return count
+        # 计算 min max score
+        x_score = 0
+        o_score = 0
 
-        def check_directions (r, c, player, num_pieces):
-            # Checks open enough sequences in four directions
-            # open enough means there's enough empty space (no player, no other player, and valid)
-            #                   to form a sequence of length k
-            directions = {'hor': get_board_row (r, board),
-                          'ver': get_board_col (c, board),
-                          'dia_up': get_board_dia_up (r, c, board),
-                          'dia_down': get_board_dia_down (r, c, board)}
-            count = 0
+        directions = [(0, 1), (1, 0), (1, 1), (-1, 1)]
 
-            for dir_name, dir_elements in directions.items ():
-                # for the diagonals, skip diagonals shorter than k
-                if len (dir_elements) < k:
-                    break
+        def in_bounds (r, c):
+            """Check if (r, c) is inside the board."""
+            return 0 <= r < rows and 0 <= c < cols
 
-                # Step 1: check if the current direction has exact num_pieces of player
-                if dir_elements.count (player) == num_pieces:
-                    # Step 2: check if there's enough empty space
-                    consecutive_sequence = 0  # need at least k
-                    for item in dir_elements:
-                        if item == "" or item == player:
-                            consecutive_sequence += 1
-                        else:  # we meet other player or an obstacle
-                            consecutive_sequence = 0
+        for r in range (rows):
+            for c in range (cols):
+                # 每个方向都尝试 连 k 个
+                for dr, dc in directions: # 例如第一个方向为 (0,1) 则 dr = 0, dc = 1
+                    end_r = r + (k - 1) * dr
+                    end_c = c + (k - 1) * dc
 
-                        if consecutive_sequence >= k:
-                            count += 1
-                            break
+                    # 检查 end_r end_c 是否 in bound
+                    if not in_bounds (end_r, end_c):
+                        continue  # 这个方向无法连成k个棋子
 
-            return count
+                    # 拿到这一小段距离里的所有位置，可以理解为从 start(r,c) 到 end(r,c)，且他们的长度为k。
+                    line_positions = [
+                        (r + i * dr, c + i * dc) for i in range (k)
+                    ]
 
-        def compute_eval (player, k):
-            # Compute evaluation of a state for a player by the following rule:
-            #   count_lines of i items in an open enough row/column/diagonal * 10 ** (i-1) for 1 <= i <= k
-            sum = 0
-            for i in range (1, k + 1):
-                sum += count_lines (player, i) * (10 ** (i - 1))
-            return sum
+                    # 检查在 line_position 里所有位置 都是 合法位置
+                    if not all (pos in valid_positions for pos in line_positions):
+                        continue
 
-        # return eval of X - eval of O so that value is larger when state better for X, smaller when state better for O
-        return compute_eval ('X', k) - compute_eval ('O', k)
+                    # 拿到棋盘上这些位置（line_position）的symbol
+                    line_symbols = [board[rp][cp] for (rp, cp) in line_positions]
 
+                    # 检查这一小段位置里是否被 O 阻挡
+                    if 'O' not in line_symbols:
+                        count_x = line_symbols.count ('X') # 记录有多少个未被阻挡的 symbol
+                        if count_x > 0:
+                            x_score += 10 ** (count_x - 1) # Add 10^(count_x - 1)
 
+                    # 检查这一小段位置里是否被 X 阻挡
+                    if 'X' not in line_symbols:
+                        # Count how many 'O' are in this line
+                        count_o = line_symbols.count ('O')
+                        if count_o > 0:
+                            o_score += 10 ** (count_o - 1) # Add 10^(count_o - 1)
 
-
-
-
+        return x_score - o_score
 
     def get_possible_moves (self, state):
         """
